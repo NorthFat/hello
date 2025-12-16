@@ -406,7 +406,7 @@ $ g++ -std=c++17 -Wall -Wextra -c event_modern.cc -o event_modern.o
 - **msgq 现代化项目：** [msgq_modern.h](msgq_modern.h)
 - **完整改进指南：** [MODERNIZATION_SUMMARY.md](MODERNIZATION_SUMMARY.md)
 - **原始项目：** https://github.com/commaai/msgq
-- **现代版本：** https://github.com/NorthFat/hello
+- **现代版本：** https://github.com/NorthFat/msgq-modern
 
 ---
 

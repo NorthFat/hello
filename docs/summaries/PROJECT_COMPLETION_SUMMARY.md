@@ -364,7 +364,7 @@ bool is_valid() const noexcept;
 
 ## 📞 项目信息
 
-- **代码仓库：** https://github.com/NorthFat/hello
+- **代码仓库：** https://github.com/NorthFat/msgq-modern
 - **原始项目：** https://github.com/commaai/msgq
 - **C++ 标准：** C++17
 - **编译器：** GCC 10+ / Clang 11+
