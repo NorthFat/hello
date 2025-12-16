@@ -251,14 +251,20 @@ public:
     
     Message(gsl::span<const char> data) : data_(data.begin(), data.end()) {}
     
+    // Constructor for any span type (C++20 or with custom span)
+    template<typename T>
+    explicit Message(gsl::span<T> data) noexcept
+      : data_(reinterpret_cast<const char*>(data.data()), 
+              reinterpret_cast<const char*>(data.data()) + data.size() * sizeof(T)) {}
+    
     // C++20 std::span constructor (only if std::span is different from msgq::span)
     #if __cplusplus >= 202002L && !defined(MSGQ_USING_STD_SPAN)
     Message(std::span<const char> data) : data_(data.begin(), data.end()) {}
     
     template<typename T>
-    explicit Message(std::span<T> data) requires (!std::is_same_v<T, char>)
+    explicit Message(std::span<T> data) noexcept
       : data_(reinterpret_cast<const char*>(data.data()), 
-              reinterpret_cast<const char*>(data.data()) + data.size_bytes()) {}
+              reinterpret_cast<const char*>(data.data()) + data.size() * sizeof(T)) {}
     #endif
     
     template<typename Iterator>
