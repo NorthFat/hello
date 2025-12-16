@@ -13,6 +13,11 @@
 #include <atomic>
 #include <stdexcept>
 
+// C++20 std::span support
+#if __cplusplus >= 202002L
+  #include <span>
+#endif
+
 // Optional: GSL support
 // Install: sudo apt-get install gsl-lite-dev (Ubuntu/Debian)
 //          brew install gsl (macOS)
@@ -27,38 +32,162 @@
   #define MSGQ_HAS_GSL 0
 #endif
 
-// Simple span replacement if GSL not available
+// ============================================================================
+// Span abstraction - unified interface for C++20 std::span and fallback
+// ============================================================================
+
 namespace msgq {
-  #if MSGQ_HAS_GSL
+  
+  #if __cplusplus >= 202002L
+    // C++20: Use std::span directly
+    template<typename T>
+    using span = std::span<T>;
+    
+    // Mark that we're using std::span
+    #define MSGQ_USING_STD_SPAN 1
+    
+    // Helper for creating spans with deduction
+    template<typename T>
+    constexpr span<T> make_span(T* data, size_t size) noexcept {
+      return span<T>(data, size);
+    }
+    
+    template<typename Container>
+    constexpr auto make_span(Container& c) noexcept {
+      return span<typename Container::value_type>(c);
+    }
+    
+    template<typename Container>
+    constexpr auto make_span(const Container& c) noexcept {
+      return span<const typename Container::value_type>(c);
+    }
+  
+  #elif MSGQ_HAS_GSL
+    // C++17 with GSL: Use gsl::span
     using gsl::span;
+    
+    #undef MSGQ_USING_STD_SPAN
+    
+    template<typename T>
+    constexpr span<T> make_span(T* data, size_t size) noexcept {
+      return span<T>(data, size);
+    }
+    
+    template<typename Container>
+    constexpr auto make_span(Container& c) noexcept {
+      return span<typename Container::value_type>(c);
+    }
+    
+    template<typename Container>
+    constexpr auto make_span(const Container& c) noexcept {
+      return span<const typename Container::value_type>(c);
+    }
+  
   #else
-    // Minimal span implementation for when GSL is not available
+    // C++17 fallback: Minimal span implementation
     template<typename T>
     class span {
     private:
       T* data_;
       size_t size_;
+    
     public:
+      // Constructors
       constexpr span() noexcept : data_(nullptr), size_(0) {}
-      constexpr span(T* data, size_t size) noexcept : data_(data), size_(size) {}
+      
+      constexpr span(T* data, size_t size) noexcept 
+        : data_(data), size_(size) {}
+      
+      // From containers (SFINAE-enabled)
       template<typename Container>
       constexpr span(Container& c) noexcept 
         : data_(c.data()), size_(c.size()) {}
+      
       template<typename Container>
       constexpr span(const Container& c) noexcept 
         : data_(const_cast<T*>(c.data())), size_(c.size()) {}
       
-      constexpr T* data() const noexcept { return data_; }
-      constexpr size_t size() const noexcept { return size_; }
-      constexpr bool empty() const noexcept { return size_ == 0; }
+      // Copy constructor and assignment
+      constexpr span(const span&) noexcept = default;
+      constexpr span& operator=(const span&) noexcept = default;
       
-      constexpr T* begin() const noexcept { return data_; }
-      constexpr T* end() const noexcept { return data_ + size_; }
+      // Element access
+      [[nodiscard]] constexpr T* data() const noexcept { return data_; }
+      [[nodiscard]] constexpr size_t size() const noexcept { return size_; }
+      [[nodiscard]] constexpr size_t size_bytes() const noexcept { 
+        return size_ * sizeof(T); 
+      }
+      [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
+      
+      // Indexed access
+      [[nodiscard]] constexpr T& operator[](size_t idx) const noexcept {
+        return data_[idx];
+      }
+      
+      [[nodiscard]] constexpr T& front() const noexcept {
+        return data_[0];
+      }
+      
+      [[nodiscard]] constexpr T& back() const noexcept {
+        return data_[size_ - 1];
+      }
+      
+      // Iterator support
+      [[nodiscard]] constexpr T* begin() const noexcept { return data_; }
+      [[nodiscard]] constexpr T* end() const noexcept { return data_ + size_; }
+      [[nodiscard]] constexpr const T* cbegin() const noexcept { return data_; }
+      [[nodiscard]] constexpr const T* cend() const noexcept { return data_ + size_; }
+      
+      // Subspan
+      [[nodiscard]] constexpr span subspan(size_t offset, size_t count = -1) const noexcept {
+        if (count == (size_t)-1) count = size_ - offset;
+        return span(data_ + offset, count);
+      }
+      
+      [[nodiscard]] constexpr span first(size_t count) const noexcept {
+        return span(data_, count);
+      }
+      
+      [[nodiscard]] constexpr span last(size_t count) const noexcept {
+        return span(data_ + size_ - count, count);
+      }
+      
+      // Comparison
+      constexpr bool operator==(const span& other) const noexcept {
+        return data_ == other.data_ && size_ == other.size_;
+      }
+      
+      constexpr bool operator!=(const span& other) const noexcept {
+        return !(*this == other);
+      }
     };
-  #endif
+    
+    #undef MSGQ_USING_STD_SPAN
+    
+    // Helper functions for span creation
+    template<typename T>
+    constexpr span<T> make_span(T* data, size_t size) noexcept {
+      return span<T>(data, size);
+    }
+    
+    template<typename Container>
+    constexpr auto make_span(Container& c) noexcept {
+      return span<typename Container::value_type>(c);
+    }
+    
+    template<typename Container>
+    constexpr auto make_span(const Container& c) noexcept {
+      return span<const typename Container::value_type>(c);
+    }
+  
+  #endif // Span implementation selection
+  
 } // namespace msgq
 
-namespace gsl = msgq;
+// Make gsl::span available as an alias
+namespace gsl {
+  using msgq::span;
+}
 
 namespace msgq {
 
@@ -122,6 +251,16 @@ public:
     
     Message(gsl::span<const char> data) : data_(data.begin(), data.end()) {}
     
+    // C++20 std::span constructor (only if std::span is different from msgq::span)
+    #if __cplusplus >= 202002L && !defined(MSGQ_USING_STD_SPAN)
+    Message(std::span<const char> data) : data_(data.begin(), data.end()) {}
+    
+    template<typename T>
+    explicit Message(std::span<T> data) requires (!std::is_same_v<T, char>)
+      : data_(reinterpret_cast<const char*>(data.data()), 
+              reinterpret_cast<const char*>(data.data()) + data.size_bytes()) {}
+    #endif
+    
     template<typename Iterator>
     Message(Iterator begin, Iterator end) : data_(begin, end) {}
     
@@ -140,6 +279,34 @@ public:
     [[nodiscard]] gsl::span<char> data() noexcept {
         return gsl::span<char>(data_.data(), data_.size());
     }
+    
+    // C++20 std::span accessors
+    #if __cplusplus >= 202002L
+    [[nodiscard]] std::span<const char> as_span() const noexcept {
+        return std::span<const char>(data_.data(), data_.size());
+    }
+    
+    [[nodiscard]] std::span<char> as_span() noexcept {
+        return std::span<char>(data_.data(), data_.size());
+    }
+    
+    // Generic typed span access for C++20
+    template<typename T>
+    [[nodiscard]] std::span<const T> as_span() const noexcept {
+        return std::span<const T>(
+            reinterpret_cast<const T*>(data_.data()),
+            data_.size() / sizeof(T)
+        );
+    }
+    
+    template<typename T>
+    [[nodiscard]] std::span<T> as_span() noexcept {
+        return std::span<T>(
+            reinterpret_cast<T*>(data_.data()),
+            data_.size() / sizeof(T)
+        );
+    }
+    #endif
     
     [[nodiscard]] size_t size() const noexcept { return data_.size(); }
     
@@ -269,6 +436,25 @@ public:
     // Send message (single producer)
     void send(gsl::span<const char> data);
     void send(const Message& msg);
+    
+    // C++20 std::span overloads (only if std::span is different from msgq::span)
+    #if __cplusplus >= 202002L && !defined(MSGQ_USING_STD_SPAN)
+    void send(std::span<const char> data) {
+      send(gsl::span<const char>(data.data(), data.size()));
+    }
+    
+    void send(std::span<char> data) {
+      send(gsl::span<const char>(data.data(), data.size()));
+    }
+    
+    template<typename T>
+    void send(std::span<T> data) requires (!std::is_same_v<T, char>) {
+      send(gsl::span<const char>(
+        reinterpret_cast<const char*>(data.data()), 
+        data.size_bytes()
+      ));
+    }
+    #endif
     
     // Receive message (multiple consumers)
     [[nodiscard]] Message recv(int timeout_ms = DEFAULT_TIMEOUT_MS, bool conflate = false);
