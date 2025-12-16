@@ -9,8 +9,16 @@ ipc_pyx.cpp
 __pycache__/
 *.egg-info/
 dist/
-build/
+build/**
 .eggs/
+
+# Build directory exclusions (but keep the folder structure)
+build/*.o
+build/*.a
+build/*.so
+build/CMakeFiles/
+build/cmake_install.cmake
+build/CMakeCache.txt
 
 # IDE and editor files
 .vscode/
